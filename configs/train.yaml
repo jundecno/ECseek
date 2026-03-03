@@ -1,0 +1,13 @@
+batch_size: 32
+num_epochs: 200
+seed: 3407
+devices: [0,1]
+num_workers: 4
+loss_fn: mse
+lr: 3e-4
+lr_minlr: 3e-6
+lr_monitor: val/loss
+weight_decay: 1e-2
+dataset: xxx
+valid: xxx
+test: xxx

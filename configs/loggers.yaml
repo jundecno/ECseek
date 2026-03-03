@@ -1,0 +1,25 @@
+# https://wandb.ai
+
+wandb:
+  _target_: lightning.pytorch.loggers.wandb.WandbLogger
+  project: xxx
+  name: ${name}
+  save_dir: "../logs/"
+  offline: False
+  id: null # pass correct id to resume experiment!
+  entity: "xxx-xxx"
+  log_model: True
+  prefix: ""
+  job_type: "train"
+  group: ""
+  tags: []
+
+tensorboard:
+  _target_: lightning.pytorch.loggers.tensorboard.TensorBoardLogger
+  save_dir: "../logs/tensorboard/"
+  name: ${name}
+  version: null # pass correct version to resume experiment!
+  default_hp_metric: False
+  log_graph: True
+  prefix: ""
+  flush_secs: 30
