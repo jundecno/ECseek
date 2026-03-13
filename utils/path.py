@@ -1,8 +1,6 @@
 import rootutils
 root_path = str(rootutils.setup_root(__file__, indicator=".root", pythonpath=True))
 
-from tqdm import tqdm
-
 def get_dataset_path():
     return root_path + "/datasets/"
 
@@ -38,3 +36,10 @@ statis_path = get_statis_path()
 labels_path = get_labels_path()
 feature_path = get_feature_path()
 global_tools_path = "xxx/tools/"
+
+UID_COL = "UniprotID"
+SEQ_COL = "sequence"
+RXN_COL = "CANO_RXN_SMILES"
+PRANK_BIN = "/home/zzjun/tools/p2rank/prank.sh"
+AFDB = "/data/zzjun/ECseek/data/afdb"
+AFILLDB = "/data/zzjun/ECseek/data/afilldb"

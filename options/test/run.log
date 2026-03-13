@@ -1,0 +1,63 @@
+[INFO] Writable - predicting pockets for proteins from dataset [P80225.cif]
+[INFO] PredictPocketsRoutine - outdir: test/
+[INFO] Model - Loading model from directory (v3 format): /home/zzjun/tools/p2rank/distro/models/default
+[INFO] LJEnergyCalculator - LJEnergyCalculator initialized: rc=9.0, ron=7.0, min_r=1.8, probe=(σ=3.75, ε=0.12), 4 elements loaded
+[INFO] LJEnergyCalculator - LJEnergyCalculator initialized: rc=9.0, ron=7.0, min_r=1.8, probe=(σ=3.75, ε=0.12), 4 elements loaded
+[INFO] LJEnergyCalculator - LJEnergyCalculator initialized: rc=9.0, ron=7.0, min_r=1.8, probe=(σ=3.75, ε=0.12), 4 elements loaded
+[INFO] LJEnergyCalculator - LJEnergyCalculator initialized: rc=9.0, ron=7.0, min_r=1.8, probe=(σ=3.75, ε=0.12), 4 elements loaded
+[INFO] LJEnergyCalculator - LJEnergyCalculator initialized: rc=9.0, ron=7.0, min_r=1.8, probe=(σ=3.75, ε=0.12), 4 elements loaded
+[INFO] EnergyCalculator - EnergyCalculator initialized: rc=9.0, ron=7.0, min_r=1.8, probes=[NEUTRAL_APOLAR_SP], 4 LJ elements, 0 HB overrides loaded
+[INFO] EnergyCalculator - EnergyCalculator initialized: rc=9.0, ron=7.0, min_r=1.8, probes=[HB_ACCEPTOR_SP], 4 LJ elements, 0 HB overrides loaded
+[INFO] EnergyCalculator - EnergyCalculator initialized: rc=9.0, ron=7.0, min_r=1.8, probes=[HB_DONOR_SP], 4 LJ elements, 0 HB overrides loaded
+[INFO] EnergyCalculator - EnergyCalculator initialized: rc=9.0, ron=7.0, min_r=1.8, probes=[AROMATIC_RING_SP], 4 LJ elements, 0 HB overrides loaded
+[INFO] EnergyCalculator - EnergyCalculator initialized: rc=9.0, ron=7.0, min_r=1.8, probes=[CATION_SP], 4 LJ elements, 0 HB overrides loaded
+[INFO] FeatureSetup - effectively enabled features: [chem, volsite, protrusion, bfactor, atom_table]
+[INFO] Dataset - processing dataset [P80225.cif] using 8 threads
+[INFO] Dataset - 
+------------------------------------------------------------------------------------------------------------------------
+processing [P80225.cif] (1/1)
+------------------------------------------------------------------------------------------------------------------------
+
+[INFO] Writable - processing [P80225.cif] (1/1)
+[INFO] Protein - loading protein [/data/zzjun/ECseek/data/afdb/P8/02/25/P80225.cif]
+[INFO] PdbUtils - loading file [/data/zzjun/ECseek/data/afdb/P8/02/25/P80225.cif]
+[ERROR] Dataset - error processing dataset item [P80225.cif]
+cz.siret.prank.program.PrankException: Failed to load structure from '/data/zzjun/ECseek/data/afdb/P8/02/25/P80225.cif'
+	at cz.siret.prank.utils.PdbUtils.loadFromCifFile(PdbUtils.groovy:99)
+	at cz.siret.prank.utils.PdbUtils.loadFromFile(PdbUtils.groovy:75)
+	at cz.siret.prank.domain.Protein.loadFile(Protein.groovy:514)
+	at cz.siret.prank.domain.Protein.load(Protein.groovy:446)
+	at cz.siret.prank.domain.loaders.DatasetItemLoader.loadPredictionPair(DatasetItemLoader.groovy:46)
+	at cz.siret.prank.domain.Dataset$Item.loadPredictionPair(Dataset.groovy:889)
+	at cz.siret.prank.domain.Dataset$Item.getPredictionPair(Dataset.groovy:871)
+	at cz.siret.prank.program.routines.predict.PredictPocketsRoutine$_execute_closure1.doCall(PredictPocketsRoutine.groovy:92)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.codehaus.groovy.reflection.CachedMethod.invoke(CachedMethod.java:338)
+	at groovy.lang.MetaMethod.doMethodInvoke(MetaMethod.java:274)
+	at org.codehaus.groovy.runtime.metaclass.ClosureMetaClass.invokeMethod(ClosureMetaClass.java:270)
+	at groovy.lang.MetaClassImpl.invokeMethod(MetaClassImpl.java:1015)
+	at groovy.lang.Closure.call(Closure.java:471)
+	at groovy.lang.Closure.call(Closure.java:460)
+	at cz.siret.prank.domain.Dataset$1.processItem(Dataset.groovy:162)
+	at cz.siret.prank.domain.Dataset.processssItem(Dataset.groovy:245)
+	at cz.siret.prank.domain.Dataset$2.call(Dataset.groovy:209)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+Caused by: java.util.NoSuchElementException: could not find entity with id 
+	at org.biojava.nbio.structure.io.cif.CifStructureConsumerImpl.lambda$getEntityType$6(CifStructureConsumerImpl.java:1336)
+	at java.base/java.util.Optional.orElseThrow(Optional.java:403)
+	at org.biojava.nbio.structure.io.cif.CifStructureConsumerImpl.getEntityType(CifStructureConsumerImpl.java:1336)
+	at org.biojava.nbio.structure.io.cif.CifStructureConsumerImpl.finish(CifStructureConsumerImpl.java:1183)
+	at org.biojava.nbio.structure.io.cif.CifStructureConverter.fromCifFile(CifStructureConverter.java:160)
+	at org.biojava.nbio.structure.io.cif.CifStructureConverter.fromInputStream(CifStructureConverter.java:83)
+	at cz.siret.prank.utils.PdbUtils.loadFromCifFile(PdbUtils.groovy:97)
+	... 22 more
+[INFO] Writable - predicting pockets finished in 0 hours 0 minutes 1.300 seconds
+[INFO] Writable - results saved to directory [/data/zzjun/ECseek/options/test]
+[INFO] Console - ERROR on processing 1 file(s):
+[INFO] Console -     [P80225.cif]
+[INFO] Console - 
+[INFO] Console - Finished with ERROR in 0 hours 0 minutes 2.338 seconds.

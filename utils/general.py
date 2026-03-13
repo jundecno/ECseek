@@ -9,14 +9,14 @@ import periodictable
 from Bio.Data.PDBData import protein_letters_3to1_extended
 from Bio.SeqUtils import seq1
 from rdkit import Chem
-
+from rdkit.Chem import AllChem
+from tqdm import tqdm
 # general config
-parser = PDB.PDBParser(QUIET=True)
-
+parser = PDB.PDBParser(QUIET=True) # type: ignore
+cif_parser = PDB.MMCIFParser(QUIET=True) # type: ignore
 # easy function
 elem2num = lambda x: periodictable.elements.symbol(x[:1] + x[1:].lower()).number
 elem2mass = lambda x: periodictable.elements.symbol(x[:1] + x[1:].lower()).mass
-
 
 def pkl_load(file_path):
     """
@@ -88,10 +88,24 @@ def make_dir(path):
         os.makedirs(path, exist_ok=True)  # 如果存在，则不报错
 
 
+def check_dir(path):
+    folder = os.path.dirname(path) if "." in path.split("/")[-1] else path
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+        print(f"Make new directory: {folder}")
+
+
+def json2fasta(json_file, fasta_file):
+    uid2seq = json_load(json_file)
+    with open(fasta_file, "w") as f:
+        for uid, seq in uid2seq.items():
+            f.write(f">{uid}\n{seq}\n")
+
+
 def pdb2fasta(pdb_file, protein_name=None):
     if protein_name is None:
         protein_name = os.path.basename(pdb_file).split(".")[0]
-    protein = parser.get_structure("protein", pdb_file)[0]
+    protein = parser.get_structure("protein", pdb_file)[0] # type: ignore
     res_str = ""
     for chain in protein:
         chain_str = f">{protein_name}_{chain.id}\n"
@@ -152,7 +166,7 @@ def read_fasta(path, label=False, skew=0):
 
 
 def parse_pdb(filepath):
-    structure = parser.get_structure(filepath, filepath)[0]
+    structure = parser.get_structure(filepath, filepath)[0] # type: ignore
     protein = {}
     # chain level
     for j, chain in enumerate(structure.get_chains()):
@@ -172,7 +186,7 @@ def parse_pdb(filepath):
                     if atom.element != "H":
                         atomname = atom.get_name()
                         atomnames.append(atomname)
-                        residue_atomcoords.append(list(atom.get_vector()))
+                        residue_atomcoords.append(list(atom.get_vector())) # type: ignore
                 aa_residues_dict[i]["atoms"] = atomnames
                 aa_residues_dict[i]["coords"] = np.array(residue_atomcoords)
         # not save non-standard residues
@@ -216,3 +230,10 @@ def pp2dict(prot_file, pokt_file):
     res_dict["order"] = order_list
     return {"aa_seq": res_dict, "p_idx": index_dict}
 
+
+def uid2path(uid, is_dir=False):
+    if uid.endswith(".cif"):
+        uid = uid[:-4]
+    if is_dir:
+        return os.path.join(uid[:2], uid[2:4], uid[4:6])
+    return os.path.join(uid[:2], uid[2:4], uid[4:6], f"{uid}.cif")
