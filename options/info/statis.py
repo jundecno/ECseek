@@ -59,13 +59,31 @@ def plot_max_atoms_distribution(distribution_file):
     plt.title("Distribution of Max Atoms in Substrate for RHEA Reactions")
     plt.savefig(f"{root_path}/data/enzyme/RHEA/processed/rxn_max_atoms_distribution.png")
 
+
+def get_train_valid(train_csv, valid_csv):
+    train_df = pd.read_csv(train_csv)
+    valid_df = pd.read_csv(valid_csv)
+    train_uid = set(train_df["UniprotID"].values)
+    valid_uid = set(valid_df["UniprotID"].values)
+    all_uid = train_uid.union(valid_uid)
+    cnt = 0
+    for uid in all_uid:
+        uid_path = f"/data/zzjun/ECseek/data/features/protein/{uid2path(uid)}".replace(".cif",".npz")
+        if not os.path.exists(uid_path):
+            cnt +=1
+    print(f"Train set has {len(all_uid)} unique proteins.")
+    print(f"Number of missing protein features: {cnt}")
+
+
+
 if __name__ == "__main__":
     # cal_prot_counts()
     # statis_prots(f"{root_path}/data/enzyme/ENZYME/af2_error.fasta")
-    statis_max_atoms(f"{root_path}/data/enzyme/RHEA/processed/rxn2smi.json")
+    # statis_max_atoms(f"{root_path}/data/enzyme/RHEA/processed/rxn2smi.json")
     # plot_max_atoms_distribution(f"{root_path}/data/enzyme/RHEA/processed/rxn_max_atoms_distribution.json")
     # data = json_load(f"{root_path}/data/enzyme/RHEA/processed/rxn_max_atoms_distribution.json")
     # keys = list(data.keys())
     # keys.sort(key=lambda x: int(x))
     # values = [data[key] for key in keys]
     # print(keys, values)
+    get_train_valid(f"{root_path}/data/training/train.csv", f"{root_path}/data/training/valid.csv")

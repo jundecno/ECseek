@@ -28,13 +28,20 @@ def calc_reacting_center(data_path, aam_path, save_path, append=True):
 
 
 if __name__ == "__main__":
-    calc_reacting_center(
-        f"{root_path}/data/enzyme/RHEA/processed/rhea_rxn2uids.csv",
-        f"{root_path}/data/enzyme/RHEA/processed/rxn2aam_localmapper.pkl",
-        f"{root_path}/data/enzyme/features/center/rxn2rc_localmapper.pkl",
-    )
-    calc_reacting_center(
-        f"{root_path}/data/enzyme/RHEA/processed/rhea_rxn2uids.csv",
-        f"{root_path}/data/enzyme/RHEA/processed/rxn2aam_rxnmapper.pkl",
-        f"{root_path}/data/enzyme/features/center/rxn2rc_rxnmapper.pkl",
-    )
+    # calc_reacting_center(
+    #     f"{root_path}/data/enzyme/RHEA/processed/rhea_rxn2uids.csv",
+    #     f"{root_path}/data/enzyme/RHEA/processed/rxn2aam_localmapper.pkl",
+    #     f"{root_path}/data/enzyme/features/center/rxn2rc_localmapper.pkl",
+    # )
+    # calc_reacting_center(
+    #     f"{root_path}/data/enzyme/RHEA/processed/rhea_rxn2uids.csv",
+    #     f"{root_path}/data/enzyme/RHEA/processed/rxn2aam_rxnmapper.pkl",
+    #     f"{root_path}/data/enzyme/features/center/rxn2rc_rxnmapper.pkl",
+    # )
+    # calc_reacting_center(
+    #     f"{root_path}/data/enzyme/RHEA/split/all_need.csv",
+    #     f"{root_path}/data/enzyme/RHEA/proc/rxn2aam.pkl",
+    #     f"{root_path}/data/features/rxn2rc.pkl",
+    # )
+    data = pkl_load("/data/zzjun/ECseek/data/features/drfp.pkl")
+    print(len(data))

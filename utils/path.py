@@ -1,3 +1,5 @@
+import os
+
 import rootutils
 root_path = str(rootutils.setup_root(__file__, indicator=".root", pythonpath=True))
 
@@ -27,6 +29,16 @@ def get_labels_path():
 
 def get_feature_path():
     return get_dataset_path() + "/_feat/"
+
+def get_files(dir):
+    for root, dirs, files in os.walk(dir):
+        for file in files:
+            yield file
+
+def get_file_paths(dir):
+    for root, dirs, files in os.walk(dir):
+        for file in files:
+            yield os.path.join(root, file)
 
 data_path = get_dataset_path()
 tools_path = get_tools_path()

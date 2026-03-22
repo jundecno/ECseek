@@ -4,7 +4,7 @@ import rootutils
 
 root_path = str(rootutils.setup_root(__file__, indicator=".root", pythonpath=True))
 from utils import *
-
+from Bio.PDB import MMCIFParser  # type: ignore
 
 def check_enzyme_seqs(csv_file, uid2seq_file):
     uid2seq = json_load(uid2seq_file)
@@ -110,6 +110,108 @@ def check_multi_chain(afdb_dir):
         print(file)
 
 
+def check_train_valid(csv_file):
+    # 检查csv的UniProtID列是存在对应cif文件
+    df = pd.read_csv(csv_file)
+    uniprot_ids = df["UniprotID"].values
+    missing_uids = []
+    for uniprot_id in tqdm(uniprot_ids):
+        cif = f"{AFDB}/{uid2path(uniprot_id)}"
+        # print(cif)
+        if not os.path.exists(cif):
+            missing_uids.append(uniprot_id)
+    if missing_uids:
+        print(f"Missing UniProt IDs in AFDB: {set(missing_uids)}")
+    else:
+        print("All UniProt IDs in the csv file have corresponding CIF files in AFDB.")
+
+
+def check_pocket(sites_file):
+    data_dict = pkl_load(sites_file)
+    uid_dict = {}
+    cnt = 0
+    for uid, site_info in data_dict.items():
+        residues = site_info["residues"]
+        comp_id = site_info["comp_id"]
+        if comp_id is not None:
+            print(comp_id)
+        elif residues is not None:    
+            print(residues)
+        elif comp_id is None and residues is None:
+            cnt += 1
+    print(cnt)
+
+
+def check_rxn(train_csv, valid_csv, rxn2rc):
+    rxn_rc_dict = pkl_load(rxn2rc)
+    train_df = pd.read_csv(train_csv)
+    valid_df = pd.read_csv(valid_csv)
+    all_df = set(train_df[RXN_COL].unique()) | set(valid_df[RXN_COL].unique())
+    missing_rxns = set()
+    for rxn in tqdm(all_df):
+        if rxn not in rxn_rc_dict:
+            missing_rxns.add(rxn)
+    print(f"Missing reactions in rxn2rc mapping: {len(missing_rxns)}")
+
+
+def is_valid_pocket_file(file_path):
+    mmcif_parser = MMCIFParser(QUIET=True)
+    try:
+        structure = mmcif_parser.get_structure("pocket", file_path)
+        return True
+    except Exception as e:
+        return False
+
+
+def check_pocket_file(dir):
+    files = get_file_paths(dir)
+    for file in tqdm(files):
+        if not is_valid_pocket_file(file):
+            append_txt("err_poc.txt",f"{file}\n")
+
+
+def check_prot_fa(uid2seq_file):
+    uid2seq = pkl_load(uid2seq_file)
+    tasks = []
+    fa_len = {}
+    for uid in tqdm(uid2seq):
+        seq = uid2seq[uid]
+        fasta_len = len(seq)
+        prot_file_path = f"{AFDB}/{uid2path(uid)}"
+        fa_len[uid] = fasta_len
+        tasks.append(prot_file_path)
+
+    pool = mlc.SuperPool(128)
+    len_list = pool.map(get_resi_len, tasks,32)
+
+    cnt = 0
+    mismatch_list = []
+    for uid_len in len_list:
+        uid, stru_len = uid_len
+        fasta_len = fa_len[uid]
+
+        if fasta_len != stru_len:
+            cnt += 1
+            mismatch_list.append((uid, fasta_len, stru_len))
+
+    for uid, fasta_len, prot_len in mismatch_list:
+        print(f"UID: {uid}, FASTA Length: {fasta_len}, Protein Length: {prot_len}")
+    print(f"Total mismatches: {cnt}")
+    # UID: P49328, FASTA Length: 19, Protein Length: 532
+
+def check_final_sites(sites_file):
+    data_dict = pkl_load(sites_file)
+    print(len(data_dict))
+    for uid, site_info in data_dict.items():
+        residues = site_info["residues"]
+        comp_id = site_info["comp_id"]
+        # if comp_id is not None:
+        #     print(comp_id)
+        # elif residues is not None:    
+        #     print(residues)
+        if comp_id is None and residues is None:
+            print(uid)
+
 if __name__ == "__main__":
     # check_enzyme_seqs(f"{root_path}/data/enzyme/ENZYME/enzyme.csv", f"{root_path}/data/enzyme/ENZYME/uid2seq.json")
     # check_rhea_seqs(f"{root_path}/data/enzyme/RHEA/rhea2uniprot_sprot.tsv", f"{root_path}/data/enzyme/RHEA/uid2seq.json")
@@ -125,6 +227,14 @@ if __name__ == "__main__":
     # check_multi_chain(AFDB)
     # check_no_af2(AFDB)
     # A5EW83
-    fa_dict = json_load(f"{root_path}/data/enzyme/RHEA/uid2seq.json")
-    print(fa_dict["A5EW83"])
-    pass
+    # fa_dict = json_load(f"{root_path}/data/enzyme/RHEA/uid2seq.json")
+    # print(fa_dict["A5EW83"])
+    # check_train_valid(f"{root_path}/data/enzyme/RHEA/split/train.csv")
+    # check_train_valid(f"{root_path}/data/enzyme/RHEA/split/valid.csv")
+    # check_pocket(f"{root_path}/data/enzyme/RHEA/proc/final_sites.pkl")
+    # data = pkl_load("/data/zzjun/ECseek/data/features/center/rxn2rc_localmapper.pkl")
+    # print(len(data))
+    # check_rxn(f"{root_path}/data/training/train.csv", f"{root_path}/data/training/valid.csv", f"{root_path}/data/features/center/rxn2rc_rxnmapper.pkl")
+    # check_pocket_file(f"{root_path}/data/pockets/")
+    # check_prot_fa("/data/zzjun/ECseek/data/enzyme/RHEA/uid2seq.pkl")
+    # check_final_sites(f"{root_path}/data/enzyme/RHEA/proc/final_sites.pkl")

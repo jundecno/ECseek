@@ -4,6 +4,10 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem, DataStructs
 from rdkit.Chem import rdFingerprintGenerator
+from Bio.PDB import PDBParser, MMCIFIO, MMCIFParser # type: ignore
+import mlcrate as mlc
+import torch
+from torch_geometric.utils import to_undirected, add_self_loops
 
 def normalize_ec(ec_str: str) -> str:
     ec_items = ec_str.split(";")
@@ -28,19 +32,14 @@ def tranverse_folder(folder):
             filepath_list.append(os.path.join(root, file))
     return filepath_list
 
-def get_ligands(cif_file):
-    doc = gemmi.cif.read(cif_file)
-    block = doc.sole_block()
-    if block.get_mmcif_category("_pdbx_entity_nonpoly"):
-        return block.get_mmcif_category("_pdbx_entity_nonpoly")["comp_id"]
-    else:
-        return []
-
-
 def pdb2cif(pdb_file, cif_file):
-    structure = gemmi.read_pdb(pdb_file)
-    doc = structure.make_mmcif_document()
-    doc.write_file(cif_file)
+    # structure = gemmi.read_pdb(pdb_file)
+    # doc = structure.make_mmcif_document()
+    # doc.write_file(cif_file)
+    structure = PDBParser(QUIET=True).get_structure("protein", pdb_file)
+    io = MMCIFIO()
+    io.set_structure(structure)
+    io.save(cif_file)
 
 def calc_tanimoto(smile1, smile2):
     m1 = Chem.MolFromSmiles(smile1)
@@ -70,3 +69,47 @@ def calculate_top_matrix(a, list_b):
     sims = DataStructs.BulkTanimotoSimilarity(fp_a, fps_b)
 
     return a, res_b, np.array(sims)
+
+
+def get_resi_len(cif_file):
+    uid = os.path.basename(cif_file).split(".")[0]
+    parser = MMCIFParser(QUIET=True)
+    structure = parser.get_structure("protein", cif_file)
+    model = structure[0] # TYPE:IGNORE
+    return uid, len(list(model.get_residues()))
+
+
+def normalize_smiles(input: str, canonical=True, isomeric=False):
+    if input.endswith(".mol2"):
+        mol = Chem.MolFromMol2File(input)
+        if mol is not None:
+            return Chem.MolToSmiles(mol, canonical=canonical, isomericSmiles=isomeric)
+        else:
+            unstand_mol = Chem.MolFromMol2File(input, sanitize=False, cleanupSubstructures=False)
+            mol = Chem.RemoveHs(unstand_mol, sanitize=False)
+            return Chem.MolToSmiles(mol, canonical=canonical, isomericSmiles=isomeric)
+    else:
+        return Chem.MolToSmiles(Chem.MolFromSmiles(input), canonical=canonical, isomericSmiles=isomeric)
+
+
+def one_of_k_encoding(x, allowable_set):
+    if x not in allowable_set:
+        x = [False] * len(allowable_set)
+    return list(map(lambda s: x == s, allowable_set))
+
+
+def make_undirected_with_self_loops(edge_index, edge_attr: torch.Tensor, undirected=True, self_loops=True):
+    if undirected:
+        edge_index, edge_attr = to_undirected(edge_index, edge_attr)
+    if self_loops:
+        edge_index, edge_attr = add_self_loops(edge_index, edge_attr, fill_value=0.0)
+    return edge_index, edge_attr
+
+bonds_allowed = [
+    Chem.rdchem.BondStereo.STEREONONE,
+    Chem.rdchem.BondStereo.STEREOANY,
+    Chem.rdchem.BondStereo.STEREOE,
+    Chem.rdchem.BondStereo.STEREOZ,
+    Chem.rdchem.BondStereo.STEREOCIS,
+    Chem.rdchem.BondStereo.STEREOTRANS,
+]

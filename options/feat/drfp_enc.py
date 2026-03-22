@@ -30,14 +30,15 @@ def cano_rxn(rxn, exchange_pos=False, remove_stereo=False):
     return new_rxn
 
 
+def wapper(rxn):
+    return rxn, DrfpEncoder.encode(rxn)
+
+
 def calc_drfp(data_path, save_path, append=True):
     # 计算drfp指纹，去除环后计算
     df_data = pd.read_csv(data_path)
     rxn_list = list(set(df_data[RXN_COL]))
-    if os.path.exists(save_path) and append:
-        rxn_to_fp = pkl_load(save_path)
-    else:
-        rxn_to_fp = {}
+
     input_list = []
 
     for rxn in rxn_list:
@@ -46,12 +47,13 @@ def calc_drfp(data_path, save_path, append=True):
         if rxn_cano != rxn:
             input_list.append(rxn_cano)
 
-    drfp_results = []
-    with Pool(20) as p:
-        for fp in tqdm(p.imap(DrfpEncoder.encode, input_list), total=len(input_list)):
-            drfp_results.append(fp)
-    for rxn, fp in zip(input_list, drfp_results):
-        rxn_to_fp[rxn] = fp
+    pool = mlc.SuperPool(20)
+    results = pool.map(wapper, input_list, 32)
+    
+    rxn_to_fp = {}
+    for rxn, fp in results:
+        if fp is not None:
+            rxn_to_fp[rxn] = fp[0]
 
     print(f"Number of reactions: {len(rxn_to_fp)}")
     check_dir(os.path.dirname(save_path))
@@ -62,4 +64,4 @@ def calc_drfp(data_path, save_path, append=True):
 if __name__ == "__main__":
     # calc_drfp(f"{root_path}/data/enzyme/ENZYME/processed_data.csv", f"{root_path}/data/enzyme/ENZYME/drfp.pkl")
     # /data/zzjun/ECseek/data/enzyme/features/drfp
-    calc_drfp(f"{root_path}/data/enzyme/RHEA/processed/rhea_rxn2uids.csv", f"{root_path}/data/enzyme/features/drfp/rhea.pkl")
+    calc_drfp(f"{root_path}/data/enzyme/RHEA/split/all_need.csv", f"{root_path}/data/features/drfp.pkl")

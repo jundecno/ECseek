@@ -15,8 +15,9 @@ from tqdm import tqdm
 parser = PDB.PDBParser(QUIET=True) # type: ignore
 cif_parser = PDB.MMCIFParser(QUIET=True) # type: ignore
 # easy function
-elem2num = lambda x: periodictable.elements.symbol(x[:1] + x[1:].lower()).number
-elem2mass = lambda x: periodictable.elements.symbol(x[:1] + x[1:].lower()).mass
+elem2num = lambda x: periodictable.elements.symbol(x[:1].upper() + x[1:].lower()).number
+elem2mass = lambda x: periodictable.elements.symbol(x[:1].upper() + x[1:].lower()).mass
+main_enum = {"N": 0, "CA": 1, "C": 2, "O": 3}
 
 def pkl_load(file_path):
     """
@@ -235,5 +236,5 @@ def uid2path(uid, is_dir=False):
     if uid.endswith(".cif"):
         uid = uid[:-4]
     if is_dir:
-        return os.path.join(uid[:2], uid[2:4], uid[4:6])
+        return os.path.join(uid[:2], uid[2:4], uid[4:6], uid)
     return os.path.join(uid[:2], uid[2:4], uid[4:6], f"{uid}.cif")

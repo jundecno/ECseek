@@ -1,8 +1,8 @@
 hidden_dim: 64
-layers: 2
+node_dim: 1324
+out_dim: 512
+num_layers: 3
+heads: 4
 activation: "silu"
 norm: "layer"
-attn_dropout: 0.1
 dropout: 0.1
-num_heads: 4
-noise_rate: 0.01

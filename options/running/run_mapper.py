@@ -3,7 +3,18 @@ import rootutils
 root_path = str(rootutils.setup_root(__file__, indicator=".root", pythonpath=True))
 from utils import *
 from rdchiral.template_extractor import extract_from_reaction
+# import os
+# import pandas as pd
+# from tqdm import tqdm
+# import pickle as pkl
 
+def pkl_load(file_path):
+    with open(file_path, "rb") as file:
+        return pkl.load(file)
+
+def pkl_dump(file_path, content):
+    with open(file_path, "wb") as file:
+        pkl.dump(content, file)
 
 def calc_rxnmapper_aam(data_path, save_dir, append=True, rerun=False):
     from rxnmapper import BatchedMapper
@@ -33,7 +44,7 @@ def calc_rxnmapper_aam(data_path, save_dir, append=True, rerun=False):
 def calc_localmapper_aam(data_path, save_dir, append=True, rerun=False):
     from localmapper import localmapper
 
-    mapper = localmapper(device="cpu")
+    mapper = localmapper(device="cuda")
     save_path = os.path.join(save_dir, "rxn2aam_localmapper.pkl")
     if os.path.exists(save_path) and append and not rerun:
         cached_rxn2aam = pkl_load(save_path)
@@ -73,22 +84,28 @@ def get_template(rxn_file, out_file):
     pkl_dump(out_file, rxn_res_dict)
 
 
-def merge_rxnmapper_localmapper_aam(rxn2uid, rxn_mapper, local_mapper):
-    df = pd.read_csv(rxn2uid)
+def merge_rxnmapper_localmapper_aam(rxn_mapper, local_mapper):
     rxn2aam_rxnmapper = pkl_load(rxn_mapper)
     rxn2aam_localmapper = pkl_load(local_mapper)
-    df["rxnmapper"] = df["CANO_RXN_SMILES"].map(rxn2aam_rxnmapper)
-    df["localmapper"] = df["CANO_RXN_SMILES"].map(rxn2aam_localmapper)
-    df["template"] = df["localmapper"].fillna(df["rxnmapper"])
-    df = df.drop(columns=["rxnmapper", "localmapper"])
-    df.to_csv(rxn2uid, index=False)
+    merged_dict = {}
+    for rxn in rxn2aam_rxnmapper:
+        value = rxn2aam_rxnmapper[rxn]
+        if value == None:
+            rxn2aam_rxnmapper[rxn] = rxn2aam_localmapper[rxn]
+    merged_dict = rxn2aam_rxnmapper
+    pkl_dump(os.path.join(save_dir, "rxn2aam.pkl"), merged_dict)
 
 
 if __name__ == "__main__":
-    data_path = f"{root_path}/data/enzyme/RHEA/processed/rhea_rxn2uids.csv"
-    save_dir = f"{root_path}/data/enzyme/RHEA/processed"
+    root_path = "/data/zzjun/ECseek/"
+    data_path = f"{root_path}/data/enzyme/RHEA/split/all_need.csv"
+    save_dir = f"{root_path}/data/enzyme/RHEA/proc"
     # calc_rxnmapper_aam(data_path, save_dir)
     # calc_localmapper_aam(data_path, save_dir)
+    # merge_rxnmapper_localmapper_aam(
+    #     f"{root_path}/data/enzyme/RHEA/processed/rxn2aam_rxnmapper.pkl",
+    #     f"{root_path}/data/enzyme/RHEA/processed/rxn2aam_localmapper.pkl",
+    # )
     # get_template(
     #     f"{root_path}/data/enzyme/RHEA/processed/rxn2aam_localmapper.pkl",
     #     f"{root_path}/data/enzyme/RHEA/processed/rxn2template_localmapper.pkl",
@@ -97,8 +114,8 @@ if __name__ == "__main__":
     #     f"{root_path}/data/enzyme/RHEA/processed/rxn2aam_rxnmapper.pkl",
     #     f"{root_path}/data/enzyme/RHEA/processed/rxn2template_rxnmapper.pkl",
     # )
-    merge_rxnmapper_localmapper_aam(
-        f"{root_path}/data/enzyme/RHEA/processed/rhea_rxn2uids.csv",
-        f"{root_path}/data/enzyme/RHEA/processed/rxn2template_rxnmapper.pkl",
-        f"{root_path}/data/enzyme/RHEA/processed/rxn2template_localmapper.pkl",
-    )
+    # merge_rxnmapper_localmapper_aam(
+    #     f"{root_path}/data/enzyme/RHEA/processed/rhea_rxn2uids.csv",
+    #     f"{root_path}/data/enzyme/RHEA/processed/rxn2template_rxnmapper.pkl",
+    #     f"{root_path}/data/enzyme/RHEA/processed/rxn2template_localmapper.pkl",
+    # )
