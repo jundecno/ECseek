@@ -52,7 +52,6 @@ miniconda3/
 *.model
 weights/
 checkpoints/
-models/
 saved_models/
 
 # =========================
