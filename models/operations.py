@@ -10,7 +10,7 @@ from torch.nn import Module, ModuleList, Sequential, ModuleDict
 from torch.nn import Linear, Dropout, Identity
 import torch.nn.functional as F
 from functools import partial
-from einops import repeat, rearrange
+import lightning
 
 
 def exists(v):

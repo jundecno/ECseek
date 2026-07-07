@@ -39,7 +39,7 @@ from Bio.PDB.NeighborSearch import NeighborSearch
 
 
 def extract_heavy_atom_pocket(cif_path, comp_id, radius=8.0):
-    model = MMCIFParser(QUIET=True).get_structure("complex", cif_path)[0]  # type: ignore
+    model = MMCIFParser(QUIET=True).get_structure(cif_path, cif_path)[0]  # type: ignore
 
     ligand_heavy_atoms = []
     model_heavy_atoms = []
@@ -73,7 +73,7 @@ def get_poc_resi(cif_path, pocket_residues, save_path):
         return
     cif_parser = MMCIFParser(QUIET=True)
     io = MMCIFIO()
-    structure = cif_parser.get_structure("complex", cif_path)[0]  # type: ignore
+    structure = cif_parser.get_structure(cif_path, cif_path)[0]  # type: ignore
     make_dir(os.path.dirname(save_path))
     io.set_structure(structure)
     io.save(save_path, PocketSelect(pocket_residues))
@@ -112,4 +112,4 @@ def extra_pocket(sites_file, save_dir):
 if __name__ == "__main__":
     # defined_pocket_idx(f"{root_path}/data/enzyme/RHEA/processed/final_sites.pkl", f"{root_path}/data/enzyme/RHEA/processed/uid_rxn_idx.pkl")
     # 273741
-    extra_pocket(f"{root_path}/data/enzyme/RHEA/proc/final_sites.pkl",f"{root_path}/data/pocdb")
+    extra_pocket(f"{root_path}/data/enzyme/RHEA/proc/final_sites.pkl",f"{root_path}/data/features/pocdb")

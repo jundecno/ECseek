@@ -7,6 +7,7 @@ from esm.models.esmc import ESMC
 from esm.sdk.api import ESMProtein, LogitsConfig
 from transformers import AutoModel, AutoTokenizer
 
+
 def calc_seq_esm_C_feature(data_path, esm_node_feat_dir, esm_mean_feat_path):
     model = ESMC.from_pretrained("esmc_600m").to("cuda")  # or "cpu"
 
@@ -37,8 +38,8 @@ def calc_seq_esm_C_feature(data_path, esm_node_feat_dir, esm_mean_feat_path):
     print(f"\ncnt_fail: {len(failed_uids)}")
 
 
-def calc_smiles_feature(rxn2smi):
-    rxn2smi_dict = json_load(rxn2smi) # value是数组
+def calc_smiles_molformer_feature(rxn2smi):
+    rxn2smi_dict = json_load(rxn2smi)  # value是数组
     smis_set = set()
     for smis in rxn2smi_dict.values():
         smis_set.update(smis)
@@ -56,9 +57,91 @@ def calc_smiles_feature(rxn2smi):
         smi_feat_dict[smis] = outputs.pooler_output.cpu().numpy()
     pkl_dump(f"{root_path}/data/features/smi_feat.pkl", smi_feat_dict)
 
+
+def calc_smiles_unimol_feature(rxn2smi, save_path):
+    from unimol_tools import UniMolRepr
+
+    rxn2smi_dict = json_load(rxn2smi)  # value是数组
+    smis_set = set().union(*rxn2smi_dict.values())
+    smiles_dict = {s: (s.replace("*", "C")) for s in smis_set}
+    smiles_dict = {s: v for s, v in smiles_dict.items() if v != "[H][H]"}
+    smis_idx_dict = json_load(f"{root_path}/data/enzyme/RHEA/proc/smi2idx.json")
+    data = {"atoms": [], "coordinates": []}
+    keys = []
+
+    for key, value in smiles_dict.items():
+        sdf_path = f"{root_path}/data/enzyme/RHEA/proc/sdf/{smis_idx_dict[value]}.sdf"
+        if os.path.exists(sdf_path):
+            mol = sdf_load(sdf_path)
+            atom = [a.GetSymbol() for a in mol.GetAtoms()]
+            coord = mol.GetConformer().GetPositions()
+        else:
+            mol = Chem.MolFromSmiles(value)
+            atom = [a.GetSymbol() for a in mol.GetAtoms()]
+            coord = np.zeros((len(atom), 3))
+
+        keys.append(key)
+        data["atoms"].append(atom)
+        data["coordinates"].append(coord)
+
+    clf = UniMolRepr(data_type="molecule", remove_hs=True, model_name="unimolv1", model_size="84m")
+    unimol_repr = clf.get_repr(data, return_atomic_reprs=True)
+    # CLS token repr
+    cls_repr = unimol_repr["cls_repr"]
+    atomic_repr = unimol_repr["atomic_reprs"]
+    atomic_coords = unimol_repr["atomic_coords"]
+    atomic_symbol = unimol_repr["atomic_symbol"]
+    res_dict = {}
+    for idx, key in enumerate(keys):
+        res_dict[key] = {
+            "cls_repr": cls_repr[idx],
+            "atomic_repr": atomic_repr[idx],
+            "atomic_coords": atomic_coords[idx],
+            "atomic_symbol": atomic_symbol[idx],
+        }
+    # 单独给[H][H]创建嵌入
+    h2_clf = UniMolRepr(data_type="molecule", remove_hs=False, model_name="unimolv1", model_size="84m")
+    h2_repr = h2_clf.get_repr("[H][H]", return_atomic_reprs=True)
+    res_dict["[H][H]"] = {
+        "cls_repr": h2_repr["cls_repr"][0],
+        "atomic_repr": h2_repr["atomic_reprs"][0],
+        "atomic_coords": h2_repr["atomic_coords"][0],
+        "atomic_symbol": h2_repr["atomic_symbol"][0],
+    }
+    pkl_dump(save_path, res_dict)
+
+
+def calc_rxn_drfp_feature(data_path, save_path):
+    from drfp import DrfpEncoder
+    rxn_dict = json_load(data_path)
+
+    rxn_to_fp = {}
+    for rxn in tqdm(rxn_dict):
+        rxn_to_fp[rxn] = DrfpEncoder.encode(clean_stereo(rxn))[0]
+
+    pkl_dump(save_path, rxn_to_fp)
+
+
+def calc_rxn_rxnfp_feature(data_path, save_path):
+    from rxnfp.transformer_fingerprints import RXNBERTFingerprintGenerator, get_default_model_and_tokenizer, generate_fingerprints
+    model, tokenizer = get_default_model_and_tokenizer()
+    rxnfp_generator = RXNBERTFingerprintGenerator(model, tokenizer)  # type: ignore
+
+    rxn_dict = json_load(data_path)
+
+    rxn_to_rxnfp = {}
+    for rxn in tqdm(rxn_dict):
+        rxn_to_rxnfp[rxn] = rxnfp_generator.convert(clean_stereo(rxn))  # type: ignore
+
+    pkl_dump(save_path, rxn_to_rxnfp)
+
+
 if __name__ == "__main__":
     # calc_seq_esm_C_feature(
     #     f"{root_path}/data/enzyme/RHEA/uid2seq.pkl", f"{root_path}/data/features/protein/", f"{root_path}/data/features/esm_mean_feat.pkl"
     # )
-    calc_smiles_feature(f"{root_path}/data/enzyme/RHEA/proc/rxn2smi.json")
-    # CUDA_VISIBLE_DEVICES=0 python options/feat/pre_feature.py
+    calc_smiles_unimol_feature(f"{root_path}/data/enzyme/RHEA/proc/rxn2smi.json", f"{root_path}/data/features/unimol_feat.pkl")
+
+    calc_rxn_drfp_feature(f"{root_path}/data/features/rxn2normal.json", f"{root_path}/data/features/rxn_drfp.pkl")
+    calc_rxn_rxnfp_feature(f"{root_path}/data/features/rxn2normal.json", f"{root_path}/data/features/rxn_rxnfp.pkl")
+

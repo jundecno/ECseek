@@ -113,3 +113,60 @@ bonds_allowed = [
     Chem.rdchem.BondStereo.STEREOCIS,
     Chem.rdchem.BondStereo.STEREOTRANS,
 ]
+
+
+def calc_cos_similarity(dictA, dictB, threshold=0.8, top_k=10):
+    keysA = list(dictA.keys())
+    keysB = list(dictB.keys())
+
+    A = np.stack([np.asarray(dictA[k]).reshape(-1) for k in keysA])
+    B = np.stack([np.asarray(dictB[k]).reshape(-1) for k in keysB])
+
+    A = A / (np.linalg.norm(A, axis=1, keepdims=True) + 1e-8)
+    B = B / (np.linalg.norm(B, axis=1, keepdims=True) + 1e-8)
+
+    sim_matrix = A @ B.T
+    results = {}
+
+    for i, kA in enumerate(keysA):
+        sims = sim_matrix[i]
+
+        if top_k is not None:
+            idx = np.argsort(-sims)[:top_k]
+        else:
+            idx = np.where(sims >= threshold)[0]
+
+        results[kA] = [(keysB[j], float(sims[j])) for j in idx]
+
+    return results
+
+
+def search_similarity(query_vec, dictB, threshold=0.8, top_k=10):
+    keysB = list(dictB.keys())
+
+    q = np.asarray(query_vec).reshape(-1)
+    B = np.stack([np.asarray(dictB[k]).reshape(-1) for k in keysB])
+    # normalize
+    q = q / (np.linalg.norm(q) + 1e-8)
+    B = B / (np.linalg.norm(B, axis=1, keepdims=True) + 1e-8)
+    sims = B @ q
+    if top_k is not None:
+        idx = np.argsort(-sims)[:top_k]
+    else:
+        idx = np.where(sims >= threshold)[0]
+    results = [(keysB[j], float(sims[j])) for j in idx]
+    return results
+
+MORGAN_GEN = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)
+def get_similarity(smile1, smile2):
+    m1 = Chem.MolFromSmiles(smile1)
+    m2 = Chem.MolFromSmiles(smile2)
+
+    if m1 is None or m2 is None:
+        return 0.0
+
+    # 使用新版推荐的 GetFingerprint 方法
+    fp1 = MORGAN_GEN.GetFingerprint(m1)
+    fp2 = MORGAN_GEN.GetFingerprint(m2)
+
+    return DataStructs.TanimotoSimilarity(fp1, fp2)

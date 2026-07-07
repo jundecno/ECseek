@@ -2,6 +2,7 @@ import os
 
 import rootutils
 root_path = str(rootutils.setup_root(__file__, indicator=".root", pythonpath=True))
+from pathlib import Path
 
 def get_dataset_path():
     return root_path + "/datasets/"
@@ -55,3 +56,13 @@ RXN_COL = "CANO_RXN_SMILES"
 PRANK_BIN = "/home/zzjun/tools/p2rank/prank.sh"
 AFDB = "/data/zzjun/ECseek/data/afdb"
 AFILLDB = "/data/zzjun/ECseek/data/afilldb"
+
+
+#####
+# 转为文件名
+def dir2name(path:str):
+    path_obj = Path(path)
+    exp_name = path_obj.parent.name
+    ckpt_name = path_obj.stem
+    tag = f"{exp_name}_{ckpt_name}".replace("/", "_")
+    return tag

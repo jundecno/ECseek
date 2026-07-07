@@ -13,7 +13,7 @@ from Bio.PDB.Polypeptide import is_aa
 def get_ligands(cif_file):
     model = MMCIFParser(QUIET=True).get_structure("complex", cif_file)[0]  # type: ignore
     ligands = set()
-    uid = os.path.basename(cif_file).split(".")[0]
+    uid = os.path.basename(cif_file)
     for res in model.get_residues():
         hetflag = res.id[0].strip()
         if hetflag == "" or is_aa(res, standard=True):
@@ -75,7 +75,7 @@ def get_similar_based_on_rxn_and_afill(rxn2uid, rxn2smi, afill_ligands_csv, comp
 
 def run_pocketeer(args):
     cif_file, tmp_dir = args
-    base_name = os.path.basename(cif_file).split(".")[0]
+    base_name = os.path.basename(cif_file)
     if os.path.exists(f"{tmp_dir}/{base_name}_pocketeer/pockets.json"):
         return
     try:
@@ -131,7 +131,7 @@ def batch_run_prank(prank_path, save_path):
     for file in os.listdir(prank_path):
         if "_predictions.csv" in file:
             df = pd.read_csv(f"{prank_path}/{file}", sep=r"\s*,\s*", engine="python")
-            uid = file.split(".")[0]
+            uid = get_basename(file)
             # 如果pocketeer没有预测出结合位点，则说明该蛋白质没有已知的配体结合位点, 可能是因为该蛋白质没有已知的配体结合位点, 或者pocketeer没有找到任何匹配的模板结构.
             if df.shape[0] == 0:
                 cmd_strs.append(f"{PRANK_BIN} predict -f {AFDB}/{uid2path(uid)} -o {save_path}/{uid} > /dev/null 2>&1")

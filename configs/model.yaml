@@ -1,8 +1,12 @@
-hidden_dim: 64
-node_dim: 1324
+enz_node_dim: [960, 20, 29] # plm, sym, phy
+enz_edge_dim: 82
+rxn_node_dim: [512, 81] # plm, sym
+rxn_edge_dim: 31
+hidden_dim: 512
+edge_dim: 512
 out_dim: 512
-num_layers: 3
+num_layers: 2
 heads: 4
 activation: "silu"
 norm: "layer"
-dropout: 0.1
+dropout: 0.2

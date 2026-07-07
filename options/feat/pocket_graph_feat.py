@@ -1,13 +1,10 @@
 import rootutils
-import torch
-
 root_path = str(rootutils.setup_root(__file__, indicator=".root", pythonpath=True))
+
 from utils import *
-from torch_geometric.nn import radius_graph, radius
+from torch_geometric.nn import radius_graph
 import torch.nn.functional as F
 from torch_geometric.data import Data
-import biocrate
-
 
 def get_poc_coors(poc_struct):
     poc_coords = []
@@ -37,7 +34,7 @@ def get_pre_feat(poc_file, prot_pre_dir):
     uid = os.path.basename(poc_file)
     poc_struct = load_structure(poc_file)
     # sequence
-    poc_indices = [res.id[1] - 1 for res in poc_struct.get_residues()]  # type: ignore
+    poc_indices = [res.id[1] - 1 for res in poc_struct.get_residues()] # type: ignore
     prot_res_feat = np.load(f"{prot_pre_dir}/{uid2path(uid,True)}.npz")
     poc_pre_feat = prot_res_feat["node_feature"][poc_indices].astype(np.float32)
     # structure
@@ -124,15 +121,16 @@ def _get_distance(X, edge_index):
     return node_dist, edge_dist
 
 
-def poc_graph(uid_file, poc_dir, mean_file, save_path):
+def poc_graph(uid_file, poc_dir, mean_file, save_dir):
     uid_list = read_lines(uid_file)
     esm_dict = pkl_load(file_path=mean_file)
-    env = lmdb.open(str(save_path), subdir=False, lock=False, readahead=False, meminit=False, max_readers=64, map_size=1099511627776)
     for uid in tqdm(uid_list):
-        poc_file = f"{poc_dir}/{uid2path(uid,True)}.cif"
-
-        if os.path.exists(poc_file):
-            seq_feat, coords = get_pre_feat(poc_file, f"{root_path}/data/features/protein")
+        file = f"{poc_dir}/{uid2path(uid,True)}.cif"
+        if os.path.exists(f"{save_dir}/{uid2path(uid,True)}.pkl"):
+            continue
+        if os.path.exists(file):
+            # seq coords
+            seq_feat, coords = get_pre_feat(file, f"{root_path}/data/features/protein")
         else:
             seq_feat = esm_dict[uid].astype(np.float32).reshape(1, -1)
             coords = np.zeros((1, 5, 3), dtype=np.float32)
@@ -144,98 +142,40 @@ def poc_graph(uid_file, poc_dir, mean_file, save_path):
         node = torch.cat([seqs, geo_node_feat], dim=-1)  # [n, 1324]
         global_feat = torch.tensor(esm_dict[uid], dtype=torch.float32).reshape(1, -1)  # [1, 1152]
         poc_graph_data = Data(x=node, edge_index=edge_index, edge_attr=geo_edge_feat, seq=global_feat)
-        
-        with env.begin(write=True) as lmdb_txn:
-            lmdb_txn.put(uid.encode("utf-8"), pkl.dumps(poc_graph_data))
+        make_dir(os.path.dirname(f"{save_dir}/{uid2path(uid,True)}.pkl"))
+        pkl_dump(f"{save_dir}/{uid2path(uid,True)}.pkl", poc_graph_data)
+
+
+def poc_graph2lmdb(pocket_dir, save_dir):
+    files = get_file_paths(pocket_dir)
+    env = lmdb.open(save_dir, map_size=1024**4, map_async=True, writemap=True)
+    txn = env.begin(write=True)
+    commit_every = 1000
+    all_uids = []
+
+    for i, file in enumerate(tqdm(files, desc="Processing Graphs")):
+        uid = os.path.basename(file)
+        data = pkl_load(file)
+
+        txn.put(uid.encode("utf-8"), pkl.dumps(data, protocol=pkl.HIGHEST_PROTOCOL))
+        all_uids.append(uid)
+
+        if (i + 1) % commit_every == 0:
+            txn.commit()
+            txn = env.begin(write=True)
+
+    txn.put(b"__keys__", pkl.dumps(all_uids, protocol=pkl.HIGHEST_PROTOCOL))
+    txn.put(b"__len__", str(len(all_uids)).encode("utf-8"))
+    txn.commit()
     env.close()
+    print(f"LMDB 写入完成，共计 {len(all_uids)} 条数据。")
 
-def smi_graph(smis):
-
-    mol = Chem.MolFromSmiles(smis)
-    atoms_elem = torch.tensor([atom.GetAtomicNum() for atom in mol.GetAtoms()], dtype=torch.long)
-    edge_index = [[], []]
-    edge_attr = []
-    for bond in mol.GetBonds():
-        atm1 = bond.GetBeginAtomIdx()
-        atm2 = bond.GetEndAtomIdx()
-        edge_index[0].append(atm1)  # src j
-        edge_index[1].append(atm2)  # dst i
-
-        edge_feature_vector = []
-        edge_feature_vector.extend(one_of_k_encoding("covalent", ["self-loop", "covalent", "non-covalent"]))
-        edge_feature_vector.extend(one_of_k_encoding(bond.GetBondTypeAsDouble(), [0.0, 1.0, 1.5, 2.0, 3.0]))
-        edge_feature_vector.append(bond.GetIsConjugated())
-        edge_feature_vector.append(bond.IsInRing())
-        edge_feature_vector.extend(one_of_k_encoding(bond.GetStereo(), bonds_allowed))
-        # 添加非反应边信息
-        edge_feature_vector.extend(one_of_k_encoding("non-reaction", ["non-reaction", "reaction"])) #0, 1
-        edge_attr.append(edge_feature_vector)
-
-    edge_index = torch.tensor(edge_index, dtype=torch.long)
-    edge_attr = torch.tensor(edge_attr, dtype=torch.float)
-    return Data(x=atoms_elem, edge_index=edge_index, edge_attr=edge_attr)
-
-
-def rxn_smi_graph(rxn, rc, undirected=True, self_loops=False):
-    subs_smi, prod_smi = rxn.split(">>")
-    subs_graph = smi_graph(subs_smi)
-    prod_graph = smi_graph(prod_smi)
-    rxn_x = torch.cat([subs_graph.x, prod_graph.x], dim=0) # type: ignore
-    rxn_edge_index = torch.cat([subs_graph.edge_index, prod_graph.edge_index + subs_graph.x.shape[0]], dim=-1) # type: ignore
-    rxn_edge_attr = torch.cat([subs_graph.edge_attr, prod_graph.edge_attr], dim=0)  # type: ignore
-    if len(rc[0]) > 0 and len(rc[1]) >0:
-        subs = torch.tensor(rc[0])
-        prod = torch.tensor(rc[1]) + subs_graph.x.shape[0] # type: ignore
-        rc_edge_index = torch.stack([subs.repeat_interleave(len(prod)),prod.repeat(len(subs))], dim=0)
-        rc_edge_attr = torch.zeros((rc_edge_index.shape[1], rxn_edge_attr.shape[1]), dtype=torch.float)  # type: ignore
-        rc_edge_attr[:, -1] = 1.0  # type: ignore
-        edge_index = torch.cat([rxn_edge_index, rc_edge_index], dim=-1)  # type: ignore 2 x
-        edge_attr = torch.cat([rxn_edge_attr, rc_edge_attr], dim=0)  # type: ignore x d
-        # shape
-        edge_index, edge_attr = make_undirected_with_self_loops(edge_index, edge_attr, undirected=undirected, self_loops=self_loops)
-    else:
-        edge_index, edge_attr = make_undirected_with_self_loops(rxn_edge_index, rxn_edge_attr, undirected=undirected, self_loops=self_loops)
-    return rxn_x, edge_index, edge_attr
-
-
-def rxn_graph(feat_dir, save_path):
-    drfp_dict = pkl_load(os.path.join(feat_dir, "rxn_drfp.pkl"))
-    rxnfp_dict = pkl_load(os.path.join(feat_dir, "rxn_rxnfp.pkl"))
-    rc_dict = json_load(os.path.join(feat_dir, "rxn2rc.json"))
-    rxn2idx_dict = json_load(os.path.join(feat_dir, "rxn2idx.json"))
-    rxn_norm_dict = json_load(os.path.join(feat_dir, "rxn2normal.json"))
-    uni_feat_dict = pkl_load(os.path.join(feat_dir, "unimol_feat.pkl"))
-    # smi_feat_dict = pkl_load(os.path.join(feat_dir, "smi_feat.pkl"))
-    # unimol 使用 rxn: norm_rxn_feat， drfp和rxnfp使用 rxn: drfp_feat, rxn: rxnfp_feat （来源都是 source reaction）
-    rxn_graph_dict = {}
-    for rxn in tqdm(rxn_norm_dict):
-        norm_rxn = rxn_norm_dict[rxn]
-        subs, prod = rxn.split(">>")
-        all_smis = subs.split(".") + prod.split(".")
-        cls_feat = np.concatenate([uni_feat_dict[smi]["cls_repr"].reshape(1, -1) for smi in all_smis], axis=0)  # [s, d]
-        atom_x = np.concatenate([uni_feat_dict[smi]["atomic_repr"] for smi in all_smis], axis=0)  # [*, d]
-
-        # rxn smiles graph
-        _, edge_index, edge_attr = rxn_smi_graph(norm_rxn, rc_dict[norm_rxn], undirected=True, self_loops=False)
-        drfp_feat = torch.tensor(drfp_dict[rxn], dtype=torch.float32).reshape(1, -1) # [1, d]
-        rxnfp_feat = torch.tensor(rxnfp_dict[rxn], dtype=torch.float32).reshape(1, -1) # [1, d]
-        cls_feat = torch.tensor(cls_feat, dtype=torch.float32)  # [s+p, d]
-        atom_x = torch.tensor(atom_x, dtype=torch.float32)  # [*, d]
-        rxn_graph = Data(x=atom_x, edge_index=edge_index, edge_attr=edge_attr, drfp=drfp_feat,rxnfp=rxnfp_feat, seq=cls_feat)
-        rxn_graph_dict[str(rxn2idx_dict[rxn]).encode("utf-8")] = rxn_graph
-
-    env = lmdb.open(str(save_path), subdir=False, lock=False, readahead=False, meminit=False, max_readers=64, map_size=1099511627776)
-
-    with env.begin(write=True) as lmdb_txn:
-        for rxn, graph in tqdm(rxn_graph_dict.items()):
-            lmdb_txn.put(rxn, pkl.dumps(graph))
-    env.close()
 
 if __name__ == "__main__":
-    # poc_graph(
-    #     f"{root_path}/data/enzyme/RHEA/split/all_uids.txt",
-    #     f"{root_path}/data/features/pocdb/",
-    #     f"{root_path}/data/features/esm_mean_feat.pkl",
-    #     f"{root_path}/data/features/poc_graph.lmdb",
-    # )
-    rxn_graph(f"{root_path}/data/features/", f"{root_path}/data/features/rxn_graph.lmdb")
+    poc_graph(
+        f"{root_path}/data/enzyme/RHEA/split/all_uids.txt",
+        f"{root_path}/data/features/pocdb/",
+        f"{root_path}/data/features/esm_mean_feat.pkl",
+        f"{root_path}/data/features/pocket_graph/",
+    )
+    # poc_graph2lmdb(f"{root_path}/data/features/pocket_graph/", f"{root_path}/data/features/pocket_graph.lmdb")

@@ -11,6 +11,7 @@ from Bio.SeqUtils import seq1
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from tqdm import tqdm
+import lmdb
 # general config
 parser = PDB.PDBParser(QUIET=True) # type: ignore
 cif_parser = PDB.MMCIFParser(QUIET=True) # type: ignore
@@ -82,6 +83,14 @@ def read_lines(file_path):
     with open(file_path, "r") as file:
         res = file.readlines()
     return [x.strip() for x in res]
+
+
+def write_lmdb(file_path, data):
+    env = lmdb.open(file_path, map_size=1024 ** 4)
+    with env.begin(write=True) as txn:
+        for key, value in data.items():
+            txn.put(key.encode("utf-8"), pkl.dumps(value))
+    env.close()
 
 
 def make_dir(path):

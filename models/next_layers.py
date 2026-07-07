@@ -22,22 +22,19 @@ class PocEnc(nn.Module):
         super().__init__()
         self.hidden_dim = hidden_dim
         # input, embedding use normlization
-        # node
         self.plm_proj = Dense(enz_node_dim[0], hidden_dim)
         self.sym_proj = nn.Embedding(enz_node_dim[1], hidden_dim)  # no sym features, use learnable embedding
-        self.phy_proj = MLP([enz_node_dim[2], hidden_dim // 2, hidden_dim], activation)
-        # edge
-        self.edge_proj = MLP([enz_edge_dim, edge_dim // 2, edge_dim], activation)
-        # global
-        self.cls_proj = Dense(enz_node_dim[0], hidden_dim)
-        self.in_norm = nn.ModuleList([str2norm(norm, hidden_dim) for _ in range(3)])
-        # main layers
+        self.phy_proj = Dense(enz_node_dim[2], hidden_dim // 4, activation, norm, dropout=dropout, pre_norm=False)
+        self.fuse_proj = Dense(hidden_dim, hidden_dim, activation, norm, dropout=dropout)
+
+        self.edge_proj = Dense(enz_edge_dim, edge_dim, activation, norm, dropout=dropout, pre_norm=False)
+        self.cls_proj = Dense(enz_node_dim[0], hidden_dim, activation, norm, dropout=dropout, pre_norm=False)
+
         # graph conv layers
         self.poc_layers = nn.ModuleList(
             [GraphEncoder(hidden_dim, edge_dim, heads, activation, norm, dropout, last_layer=(i == num_layers - 1)) for i in range(num_layers)]
         )
-        self.out_proj = Dense(hidden_dim, out_dim, norm=norm)
-        self.dropout = nn.Dropout(dropout)
+        self.out_proj = MLP([hidden_dim, hidden_dim * 2, out_dim], activation, norm, dropout=dropout)
 
     def forward(self, poc_graph):  # graph
         # poc_graph = Data(x=plm_x, sym_x=sym_x, phy_x=phy_x, edge_index=edge_index, edge_attr=edge_attr, cls=cls_feat)
@@ -46,23 +43,18 @@ class PocEnc(nn.Module):
         # unpack x, edge_index, edge_attr, batch, cls
         edge_index, batch = poc_graph.edge_index, poc_graph.batch
         # x proj
-        plm_x = self.plm_proj(poc_graph.x)  # [n, hidden_dim]
-        sym_x = self.sym_proj(poc_graph.sym_x)  # [n, hidden_dim]
-        phy_x = self.phy_proj(poc_graph.phy_x)  # [n, hidden_dim]
-        x = plm_x + sym_x + phy_x  # [n, hidden_dim]
+        plm_x = self.plm_proj(poc_graph.x)  # [n, hidden_dim//2]
+        sym_x = self.sym_proj(poc_graph.sym_x)  # [n, hidden_dim//4]
+        phy_x = self.phy_proj(poc_graph.phy_x)  # [n, hidden_dim//4]
+        x = self.fuse_proj(torch.cat([plm_x, sym_x, phy_x], dim=-1))  # [n, hidden_dim]
         # other proj
         edge_attr = self.edge_proj(poc_graph.edge_attr)  # [e, edge_dim]
         cls = self.cls_proj(poc_graph.cls)  # [b, hidden_dim]
-        # in norm
-        x = self.dropout(self.in_norm[0](x))
-        edge_attr = self.dropout(self.in_norm[1](edge_attr))
-        cls = self.dropout(self.in_norm[2](cls))
         # graph conv layers
         for poc_layer in self.poc_layers:
             x, edge_attr, cls = poc_layer(x, edge_index, edge_attr, batch, cls)
         # out
-        cls = self.out_proj(cls)  # [b, out_dim]
-        return cls  # [b, out_dim]
+        return self.out_proj(cls)  # [b, out_dim]
 
 
 class RXNEnc(nn.Module):
@@ -84,24 +76,18 @@ class RXNEnc(nn.Module):
         super().__init__()
         self.hidden_dim = hidden_dim
         # input, embedding use normlization
-        # node
-        self.plm_proj = Dense(rxn_node_dim[0], hidden_dim)
+        self.plm_proj = Dense(rxn_node_dim[0], hidden_dim, activation, norm, dropout=dropout, pre_norm=False)
         self.sym_proj = nn.Embedding(rxn_node_dim[1], hidden_dim)  # no sym features, use learnable embedding
-        self.side_proj = nn.Embedding(2, hidden_dim)  # no side features, use learnable embedding
-        # edge
-        self.edge_proj = MLP([rxn_edge_dim, edge_dim // 2, edge_dim], activation)  # one-hot edge features, 不使用norm
-        # global
-        self.drfp_proj = Dense(2048, hidden_dim)  # embedding
-        self.rxnfp_proj = Dense(256, hidden_dim)  # embedding
-        # self.mol_proj = Dense(rxn_node_dim[0], hidden_dim)
-        self.in_norm = nn.ModuleList([str2norm(norm, hidden_dim) for _ in range(3)])
-        # main layers
+        self.edge_proj = Dense(rxn_edge_dim, edge_dim, activation, norm, dropout=dropout, pre_norm=False)  # one-hot edge features, 不使用norm
+        self.drfp_proj = Dense(2048, hidden_dim, activation, norm, dropout=dropout, pre_norm=False)
+        self.rxnfp_proj = Dense(256, hidden_dim, activation, norm, dropout=dropout, pre_norm=False)
+        self.mol_proj = Dense(rxn_node_dim[0], hidden_dim, activation, norm, dropout=dropout, pre_norm=False)
         # graph conv layers
         self.rxn_layers = nn.ModuleList(
-            [GraphEncoder(hidden_dim, edge_dim, heads, activation, norm, dropout, last_layer=(i == num_layers - 1)) for i in range(num_layers)]
+            [GraphEncoder(hidden_dim, edge_dim, heads, activation, norm, dropout, last_layer=i == num_layers - 1) for i in range(num_layers)]
         )
-        self.out_proj = Dense(hidden_dim, out_dim, norm=norm)
-        self.dropout = nn.Dropout(dropout)
+        self.pool = AttentionalAggregation(gate_nn=Linear(hidden_dim, 1))
+        self.out_proj = MLP([hidden_dim, hidden_dim * 2, out_dim], activation, norm, dropout=dropout)
 
     def forward(self, rxn_graph):
         # rxn_graph_data = Data(x=plm_x, sym_x=sym_x, edge_index=edge_index, edge_attr=edge_attr, drfp=drfp_feat, rxnfp=rxnfp_feat, mol_cls=mol_cls)
@@ -110,29 +96,21 @@ class RXNEnc(nn.Module):
         # unpack
         edge_index, batch = rxn_graph.edge_index, rxn_graph.batch
         # proj
-        plm_x = self.plm_proj(rxn_graph.x)  # [n, hidden_dim]
-        sym_x = self.sym_proj(rxn_graph.sym_x)  # [n, hidden_dim]
-        side_x = self.side_proj(rxn_graph.side_x)  # [n, hidden_dim]
-        x = plm_x + sym_x + side_x
+        x = self.plm_proj(rxn_graph.x) + self.sym_proj(rxn_graph.sym_x)  # [n, hidden_dim]
         # other proj
         edge_attr = self.edge_proj(rxn_graph.edge_attr)  # [e, edge_dim]
-        rxnfp = self.rxnfp_proj(rxn_graph.rxnfp)  # [b, hidden_dim]
-        drfp = self.drfp_proj(rxn_graph.drfp)  # [b, hidden_dim]
-        cls = drfp + rxnfp  # [b, hidden_dim]
-        # mol_cls = self.mol_proj(rxn_graph.mol_cls)  # [n, hidden_dim]
-        # in norm
-        x = self.dropout(self.in_norm[0](x))
-        edge_attr = self.dropout(self.in_norm[1](edge_attr))
-        cls = self.dropout(self.in_norm[2](cls))
-        # mol_cls = self.dropout(self.in_norm[3](mol_cls))
+        cls = self.drfp_proj(rxn_graph.drfp) + self.rxnfp_proj(rxn_graph.rxnfp)
         # graph conv layers
         for rxn_layer in self.rxn_layers:
             x, edge_attr, cls = rxn_layer(x, edge_index, edge_attr, batch, cls)
+        # pool
+        mol_cls = self.mol_proj(rxn_graph.mol_cls)
+        mol = self.pool(mol_cls, rxn_graph.mol_cls_batch)
         # out
-        cls = self.out_proj(cls)  # [b, out_dim]
-        return cls  # [b, out_dim]
+        return self.out_proj(mol + cls)  # [b, out_dim]
 
 
+#
 #
 #
 #
@@ -177,7 +155,7 @@ class Ranking(nn.Module):
     def __init__(self, hidden_dim=64, out_dim=1, activation="silu", norm="layer", dropout=0.1, **kwargs):
         super().__init__()
         self.hidden_dim = hidden_dim
-        self.out_proj = Dense(hidden_dim * 2, out_dim, norm=norm)
+        self.out_proj = MLP([hidden_dim * 2, hidden_dim, out_dim], activation, norm, dropout=dropout)
 
     def forward(self, poc_emb, rxn_emb):
         # poc_emb: [b, hidden_dim], rxn_emb: [b, hidden_dim]

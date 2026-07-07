@@ -45,7 +45,7 @@ def get_af2_error(json_file, save_file):
     for root, dirs, files in os.walk(af2_dir):
         for file in files:
             af2_files.append(file)
-    af2_uids = set([file.split(".")[0] for file in af2_files])
+    af2_uids = set([get_basename(file) for file in af2_files])
     missing_uids = uid2seq_set - af2_uids
     # write error fasta
     with open(save_file, "w") as f:
@@ -78,7 +78,7 @@ def check_no_af2(afill_dir):
 
     for filename in all_files:
         if ".cif" in filename:
-            uid_list.append(filename.split(".")[0])
+            uid_list.append(get_basename(filename))
     fa_dict = json_load(f"{root_path}/data/enzyme/RHEA/uid2seq.json")
     for uid in tqdm(uid_list):
         file_id = os.path.basename(uid)
@@ -238,3 +238,5 @@ if __name__ == "__main__":
     # check_pocket_file(f"{root_path}/data/pockets/")
     # check_prot_fa("/data/zzjun/ECseek/data/enzyme/RHEA/uid2seq.pkl")
     # check_final_sites(f"{root_path}/data/enzyme/RHEA/proc/final_sites.pkl")
+    data = pd.read_csv("/data/zzjun/ECseek/data/enzyme/RHEA/split/valid.csv")
+    print(len(data[data["Label"]==1]["UniprotID"].unique()))

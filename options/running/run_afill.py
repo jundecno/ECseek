@@ -29,7 +29,7 @@ def main_multiprocess(input_dir, pdb_fasta, pdb_redo_dir, n_blast=5, n_process=8
     all_files = tranverse_folder(input_dir)
     for filename in all_files:
         if ".cif" in filename:
-            uid_list.append(filename.split(".")[0])
+            uid_list.append(get_basename(filename))
 
     command_list = []
     for uid in tqdm(uid_list):

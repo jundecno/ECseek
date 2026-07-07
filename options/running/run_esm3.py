@@ -40,7 +40,7 @@ def run_esm3(fasta_file, save_dir):
 def copy_files_to_afdb(src_dir):
     all_files = tranverse_folder(src_dir)
     for file in tqdm(all_files):
-        save_file = os.path.join(AFDB, uid2path(os.path.basename(file).split(".")[0]))
+        save_file = os.path.join(AFDB, uid2path(os.path.basename(file)))
         pdb2cif(file, save_file)
 
 if __name__ == "__main__":
